@@ -3,7 +3,6 @@ from functools import partial
 import click
 
 from phenotrex.cli.generic_opt import universal_options, common_cv_options, param_options
-from phenotrex.cli.generic_func import generic_cccv
 from phenotrex.cli.clf_opt import xgb_options, svm_options
 
 click.option = partial(click.option, show_default=True)
@@ -39,6 +38,7 @@ def cccv_options(f):
 @xgb_options
 def xgb(*args, **kwargs):
     """Perform Completeness/Contamination CV on XGB model."""
+    from phenotrex.cli.generic_func import generic_cccv
     generic_cccv('xgb', *args, **kwargs)
 
 
@@ -50,4 +50,5 @@ def xgb(*args, **kwargs):
 @svm_options
 def svm(*args, **kwargs):
     """Perform Completeness/Contamination CV on SVM model."""
+    from phenotrex.cli.generic_func import generic_cccv
     generic_cccv('svm', *args, **kwargs)

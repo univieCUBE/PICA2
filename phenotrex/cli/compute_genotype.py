@@ -1,8 +1,5 @@
 import click
 
-from phenotrex.io.flat import write_genotype_file
-from phenotrex.transforms import fastas_to_grs
-
 
 @click.command(context_settings=dict(help_option_names=["-h", "--help"]),
                short_help="Transform FASTA files into a genotype file.")
@@ -18,4 +15,7 @@ def compute_genotype(input, out, n_threads=None, verb=True):
     Given a set of (possibly gzipped) DNA or protein FASTA files,
     perform annotation of EggNOG5 clusters, and write to a .genotype file.
     """
+    from phenotrex.io.flat import write_genotype_file
+    from phenotrex.transforms import fastas_to_grs
+
     write_genotype_file(genotypes=fastas_to_grs(input, verb=verb, n_threads=n_threads), output_file=out)

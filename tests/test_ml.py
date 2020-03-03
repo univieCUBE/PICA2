@@ -1,12 +1,18 @@
+from tempfile import TemporaryDirectory
+from pathlib import Path
 import sys
 import json
 
 import pytest
 import numpy as np
+import matplotlib as mpl
+mpl.use('Agg')
 
 from tests.targets import (first_genotype_accession, first_phenotype_accession, cv_scores_trex,
                            num_of_features_compressed, num_of_features_uncompressed)
 from phenotrex.io.flat import load_training_files
+from phenotrex.io.serialization import load_classifier
+from phenotrex.ml.shap_handler import ShapHandler
 from phenotrex.ml import TrexSVM, TrexXGB
 from phenotrex.util.helpers import get_x_y_tn
 from phenotrex.ml.feature_select import recursive_feature_elimination, compress_vocabulary
@@ -75,7 +81,8 @@ class TestTrexClassifier:
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
-    def test_train(self, trait_name, classifier):
+    @pytest.mark.parametrize("use_shaps", [True, False], ids=['shap', 'noshap'])
+    def test_train(self, trait_name, classifier, use_shaps):
         """
         Test TrexClassifier training. Using different traits.
         :param trait_name:
@@ -84,7 +91,7 @@ class TestTrexClassifier:
         """
         training_records, genotype, phenotype, group = self.test_load_training_files(trait_name)
         clf = classifier(verb=True, random_state=RANDOM_STATE)
-        _ = clf.train(records=training_records)
+        _ = clf.train(records=training_records, train_explainer=use_shaps)
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("cv", cv_folds, ids=[str(x) for x in cv_folds])
@@ -154,6 +161,20 @@ class TestTrexClassifier:
         fweights = clf.get_feature_weights()
         print(fweights)
         print(len(fweights))
+
+    @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
+    @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
+    def test_get_shap_values(self, trait_name, classifier):
+        """
+        Get shap values associated with the training data.
+        """
+        training_records, genotype, phenotype, group = self.test_load_training_files(trait_name)
+        clf = classifier(verb=True, random_state=RANDOM_STATE)
+        clf.train(training_records)
+        # nsamples only used by TrexSVM; reduced number of samples due to TrexSVM
+        raw_features, shaps, bias = clf.get_shap(training_records[:5], nsamples=50)
+        print(shaps.shape)
+        print(bias)
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
@@ -236,6 +257,7 @@ class TestTrexClassifier:
         model_path = DATA_PATH/f'{trait_name}_{classifier_type.lower()}.pkl'
         genotype_file = DATA_PATH/f'{trait_name}.genotype'
         print(predict(classifier=model_path, genotype=genotype_file))
+
 
     @pytest.mark.skipif(not FROM_FASTA, reason='Missing optional dependencies')
     @pytest.mark.parametrize('trait_name', trait_names, ids=trait_names)

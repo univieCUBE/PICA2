@@ -4,7 +4,6 @@ from functools import partial
 import click
 
 from phenotrex.cli.generic_opt import universal_options, common_cv_options, param_options
-from phenotrex.cli.generic_func import generic_cv
 from phenotrex.cli.clf_opt import xgb_options, svm_options
 
 click.option = partial(click.option, show_default=True)
@@ -44,6 +43,7 @@ def cv_options(f):
 @xgb_options
 def xgb(*args, **kwargs):
     """Perform CV on XGB model."""
+    from phenotrex.cli.generic_func import generic_cv
     generic_cv('xgb', *args, **kwargs)
 
 
@@ -55,4 +55,5 @@ def xgb(*args, **kwargs):
 @svm_options
 def svm(*args, **kwargs):
     """Perform CV on SVM model."""
+    from phenotrex.cli.generic_func import generic_cv
     generic_cv('svm', *args, **kwargs)

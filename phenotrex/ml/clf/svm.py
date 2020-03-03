@@ -2,16 +2,21 @@
 #
 # Created by Lukas Lüftinger on 2/5/19.
 #
-from typing import Dict
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
+import shap
 
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 from sklearn.calibration import CalibratedClassifierCV
 
 from phenotrex.ml.trex_classifier import TrexClassifier
+from phenotrex.structure.records import TrainingRecord, GenotypeRecord
 from phenotrex.util.logging import get_logger
+
+KMEANS_N_CLUSTERS = 10
+SHAP_NSAMPLE_DEFAULT = 100  # considerably less than suggested by 'auto', but may be intractable else
 
 
 class TrexSVM(TrexClassifier):
@@ -39,6 +44,7 @@ class TrexSVM(TrexClassifier):
             'max_iter': np.logspace(2, 4.3, 20).astype(int)
         }
         self.logger = get_logger(__name__, verb=verb)
+        self.shap_explainer = None
 
         if self.penalty == "l1":
             self.dual = False
@@ -56,6 +62,23 @@ class TrexSVM(TrexClassifier):
             ("vec", self.vectorizer),
             ("clf", classifier)
         ])
+
+    def train(self, records: List[TrainingRecord], train_explainer: bool = True, *args, **kwargs):
+        # must override train method here to append shapexplainer training afterwards.
+        # This is not required for XGBoost as XGboost trains a shap model internally per default.
+        super().train(records=records, *args, **kwargs)
+        clf = self.pipeline.named_steps['clf']
+        if train_explainer:
+            # must use k-means to summarize, else intractable at inference time with KernelExplainer
+            self.logger.info('Training SHAP KernelExplainer.')
+            self.logger.info(f'Running KMeans with k={KMEANS_N_CLUSTERS} on background data...')
+            data = shap.kmeans(self._get_raw_features(records).toarray(), k=KMEANS_N_CLUSTERS)
+            self.shap_explainer = shap.KernelExplainer(
+                clf.predict_proba,
+                data,
+                link="logit",
+            )
+        return self
 
     def _get_coef_(self, pipeline: Pipeline = None) -> np.array:
         r"""
@@ -105,3 +128,17 @@ class TrexSVM(TrexClassifier):
         # TODO: weights should be adjusted if multiple original features were grouped together. probably not needed
         #  if we rely on feature selection in near future
         return sorted_weights
+
+    def get_shap(self, records: List[GenotypeRecord],
+                 nsamples=None) -> Optional[Tuple[np.ndarray, np.ndarray, float]]:
+        if self.shap_explainer is None:
+            self.logger.error('Cannot create shap values: no Shap explainer trained.')
+            return None
+        if nsamples is None:
+            nsamples=SHAP_NSAMPLE_DEFAULT
+        self.logger.info(f'Computing SHAP values for input using nsamples={nsamples}.'
+                         f' This may take a long time.')
+        raw_feats = self._get_raw_features(records).astype(int)  # numpy error if using bools
+        shap_values = self.shap_explainer.shap_values(raw_feats, nsamples=nsamples)[0]
+        shap_bias = self.shap_explainer.expected_value[0]
+        return raw_feats, shap_values, shap_bias

@@ -3,7 +3,6 @@ from functools import partial
 import click
 
 from phenotrex.cli.generic_opt import universal_options, common_train_options, param_options
-from phenotrex.cli.generic_func import generic_train
 from phenotrex.cli.clf_opt import xgb_options, svm_options
 
 click.option = partial(click.option, show_default=True)
@@ -26,6 +25,7 @@ def train():
 @xgb_options
 def xgb(*args, **kwargs):
     """Train XGB model."""
+    from phenotrex.cli.generic_func import generic_train
     generic_train('xgb', *args, **kwargs)
 
 
@@ -36,4 +36,5 @@ def xgb(*args, **kwargs):
 @svm_options
 def svm(*args, **kwargs):
     """Train SVM model."""
+    from phenotrex.cli.generic_func import generic_train
     generic_train('svm', *args, **kwargs)

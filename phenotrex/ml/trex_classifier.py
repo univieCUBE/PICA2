@@ -5,6 +5,7 @@ from abc import abstractmethod
 from pprint import pformat
 import gc
 
+from scipy.sparse import csr_matrix
 import numpy as np
 
 from sklearn.base import clone
@@ -48,6 +49,17 @@ class TrexClassifier(ABC):
         self.default_search_params = None
         self.n_jobs = 1
 
+    def _get_raw_features(self, records: List[GenotypeRecord]) -> csr_matrix:
+        """
+        Apply the trained vectorizer in the TrexClassifier and return a numpy array suitable for
+        inputting into a classifier or SHAP explainer.
+        """
+        if self.trait_name is None:
+            raise RuntimeError('TrexClassifier not fitted.')
+        vec = self.pipeline.named_steps['vec']
+        X = vec.transform([" ".join(x.features) for x in records])
+        return X
+
     def train(self, records: List[TrainingRecord], reduce_features: bool = False,
               n_features: int = 10000, **kwargs):
         """
@@ -59,7 +71,6 @@ class TrexClassifier(ABC):
         :param kwargs: additional named arguments are passed to the fit() method of Pipeline.
         :returns: Whether the Pipeline has been fitted on the records.
         """
-
         self.logger.info("Begin training classifier.")
         X, y, tn = get_x_y_tn(records)
         if self.trait_name is not None:
@@ -74,6 +85,11 @@ class TrexClassifier(ABC):
 
         self.trait_name = tn
 
+        extra_explainer_arg = kwargs.pop('train_explainer', None)
+        if extra_explainer_arg is not None:
+            self.logger.warning(f'{self.__class__.__name__} provides SHAP explanations without '
+                                f'training an Explainer. Argument '
+                                f'"train_explainer"={extra_explainer_arg} ignored.')
         self.pipeline.fit(X=X, y=y, **kwargs)
         self.logger.info("Classifier training completed.")
         return self
@@ -97,6 +113,19 @@ class TrexClassifier(ABC):
         Extract the weights for features from pipeline.
 
         :return: sorted Dict of feature name: weight
+        """
+        pass
+
+    def get_shap(self, records: List[GenotypeRecord],
+                 nsamples=None) -> Tuple[np.ndarray, np.ndarray, float]:
+        """
+        Compute SHAP (SHapley Additive exPlanations) values for the given input data with the fitted
+        TrexClassifier.
+
+        :param records: A list of TrainingRecords or GenotypeRecords.
+        :param nsamples: the nsamples parameter to be passed to the Explainer. Only used if the model
+                         in question relies on a KernelExplainer (e.g. TrexSVM).
+        :returns: transformed feature array, computed shap values and expected value.
         """
         pass
 
