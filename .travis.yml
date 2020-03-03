@@ -32,6 +32,7 @@ env:
 before_install:
   - export PATH="${MINICONDA_DIR}/bin:$PATH"
   - bash travis/install-conda.sh
+  - source "$HOME/miniconda/etc/profile.d/conda.sh"
   - conda activate test
   - hash -r
   - python -c "import sys; print(sys.version)"
