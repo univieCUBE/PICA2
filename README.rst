@@ -11,6 +11,10 @@ phenotrex
    :target: https://codecov.io/gh/univieCUBE/phenotrex
    :alt: Codecov
 
+.. image:: https://img.shields.io/lgtm/grade/python/g/LokiLuciferase/phenotrex.svg?logo=lgtm&logoWidth=18
+   :target: https://lgtm.com/projects/g/LokiLuciferase/phenotrex/context:python
+   :alt: Code Quality
+
 .. image:: https://travis-ci.com/univieCUBE/phenotrex.svg?branch=master
    :target: https://travis-ci.com/univieCUBE/phenotrex
    :alt: Travis CI
