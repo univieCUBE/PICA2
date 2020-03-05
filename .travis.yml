@@ -30,8 +30,10 @@ env:
   - PYTHONIOENCODING=UTF8
 
 before_install:
+  - export PATH="${MINICONDA_DIR}/bin:$PATH"
   - bash travis/install-conda.sh
-  - export PATH="$MINICONDA_DIR/bin:$PATH"
+  - source "$HOME/miniconda/etc/profile.d/conda.sh"
+  - conda activate test
   - hash -r
   - bash travis/install-pip.sh
 
