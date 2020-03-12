@@ -1,4 +1,6 @@
 import os
+import sys
+from collections import namedtuple
 from typing import List
 from pathlib import Path
 from pkg_resources import resource_filename
@@ -7,29 +9,51 @@ from subprocess import check_call, DEVNULL
 from concurrent.futures import ProcessPoolExecutor
 
 import torch
-from Bio.SeqIO import SeqRecord, parse
-from deepnog.deepnog import load_nn, predict, set_device, create_df
-from deepnog.dataset import ProteinDataset
+from deepnog.inference import load_nn, predict
+from deepnog.io import create_df, get_weights_path
+from deepnog.utils import set_device
+from deepnog.dataset import ProteinDataset, ProteinIterator
+from Bio.SeqIO import SeqRecord, parse, write
 from tqdm.auto import tqdm
 
 from phenotrex.io.flat import load_fasta_file
 from phenotrex.structure.records import GenotypeRecord
 
-
-PRODIGAL_BIN_PATH = resource_filename('phenotrex', 'bin/prodigal')
-DEEPNOG_WEIGHTS_PATH = resource_filename('deepnog', 'parameters/eggNOG5/2/deepencoding.pth')
+PRODIGAL_BIN_SUFFIX = {'win32': 'windows.exe', 'darwin': 'osx.10.9.5'}.get(sys.platform, 'linux')
+PRODIGAL_BIN_PATH = resource_filename('phenotrex', f'bin/prodigal.{PRODIGAL_BIN_SUFFIX}')
 DEEPNOG_ARCH = 'deepencoding'
-EGGNOGDB_VERS = '5.0'
+DEEPNOG_VALID_DBS = {
+    'eggNOG5',
+}
+DEEPNOG_VALID_TAX_LEVELS = {
+    1,
+    2,
+}
+
+
+class PreloadedProteinIterator(ProteinIterator):
+    """Hack ProteinDataset to load from list directly."""
+    def __init__(self, protein_list: List[SeqRecord], aa_vocab, format):
+        self.iterator = (x for x in protein_list)
+        self.vocab = aa_vocab
+        self.format = format
+        self.start = 0
+        self.pos = None
+        self.step = 0
+        self.sequence = namedtuple('sequence',
+                                   ['index', 'id', 'string', 'encoded'])
 
 
 class PreloadedProteinDataset(ProteinDataset):
     """Hack ProteinDataset to load from list directly."""
     def __init__(self, protein_list: List[SeqRecord]):
-        try:
-            super().__init__(file='')
-        except ValueError:
-            pass  # >:D
-        self.iter = (x for x in protein_list)
+        super().__init__(file=None)
+        self.protein_list = protein_list
+
+    def __iter__(self):
+        return PreloadedProteinIterator(protein_list=self.protein_list,
+                                        aa_vocab=self.vocab,
+                                        format=self.f_format)
 
 
 def fastas_to_grs(fasta_files: List[str], verb: bool = False,
@@ -40,7 +64,7 @@ def fastas_to_grs(fasta_files: List[str], verb: bool = False,
 
     :param fasta_files: a list of DNA and/or protein FASTA files to be converted into GenotypeRecords.
     :param verb: Whether to display progress of annotation with tqdm.
-    :param n_threads: Number of threads to run in parallel. Default, use up to all available CPU cores.
+    :param n_threads: Number of parallel threads. Default, use all available CPU cores.
     :returns: A list of GenotypeRecords corresponding with supplied FASTA files.
     """
     n_threads = min(os.cpu_count(), n_threads) if n_threads is not None else os.cpu_count()
@@ -66,43 +90,54 @@ def fasta_to_gr(fasta_file: str, verb: bool = False) -> GenotypeRecord:
     fname = Path(str(fasta_file)).name
     seqtype, seqs = load_fasta_file(fasta_file)
     if seqtype == 'protein':
-        return annotate_with_deepnog(fname, seqs, verb)
+        return annotate_with_deepnog(fname, seqs, verb=verb)
     else:
-        return annotate_with_deepnog(fname, call_proteins(fasta_file), verb)
+        return annotate_with_deepnog(fname, call_proteins(seqs), verb=verb)
 
 
-def call_proteins(fna_file: str) -> List[SeqRecord]:
+def call_proteins(seqs: List[SeqRecord]) -> List[SeqRecord]:
     """
     Perform protein calling with prodigal.
 
-    :param fna_file: A nucleotide fasta file.
-    :returns: a list of SeqRecords suitable for annotation with deepnog.
+    :param seqs: A list of DNA fasta SeqRecords.
+    :returns: a list of protein fasta SeqRecords suitable for annotation with deepnog.
     """
-    with NamedTemporaryFile(mode='w+') as tmp_f:
-        check_call([PRODIGAL_BIN_PATH, '-i', fna_file, '-a', tmp_f.name],
-                   stderr=DEVNULL, stdout=DEVNULL)
-        tmp_f.seek(0)
-        return list(parse(tmp_f, 'fasta'))
+    with NamedTemporaryFile(mode='w', delete=False) as fna_file:
+        write(seqs, fna_file, format='fasta')
+    with NamedTemporaryFile(mode='r', delete=False) as faa_file:
+        check_call([
+            PRODIGAL_BIN_PATH,
+            '-i', fna_file.name,
+            '-a', faa_file.name
+        ], stderr=DEVNULL, stdout=DEVNULL)
+        parsed = list(parse(faa_file, 'fasta'))
+    os.unlink(fna_file.name)
+    os.unlink(faa_file.name)  # cannot re-use .name of open NamedTemporaryFile under Win32
+    return parsed
 
 
 def annotate_with_deepnog(identifier: str, protein_list: List[SeqRecord],
+                          database: str = 'eggNOG5', tax_level: int = 2,
                           verb: bool = True) -> GenotypeRecord:
     """
     Perform calling of EggNOG5 clusters on a list of SeqRecords belonging to a sample, using deepnog.
 
     :param identifier: The name associated with the sample.
     :param protein_list: A list of SeqRecords containing protein sequences.
-    :param verb: Whether to use tqdm for progress calculation
+    :param database: Orthologous group/family database to use.
+    :param tax_level: The NCBI taxon ID of the taxonomic level to use from the given database.
+    :param verb: Whether to print verbose progress messages.
     :returns: a GenotypeRecord suitable for use with phenotrex.
     """
     device = set_device('auto')
     torch.set_num_threads(1)
-
-    model_dict = torch.load(DEEPNOG_WEIGHTS_PATH, map_location=device)
+    weights_path = get_weights_path(
+        database=database, level=str(tax_level), architecture=DEEPNOG_ARCH,
+    )
+    model_dict = torch.load(weights_path, map_location=device)
     model = load_nn(DEEPNOG_ARCH, model_dict, device)
     class_labels = model_dict['classes']
     dataset = PreloadedProteinDataset(protein_list)
-
     preds, confs, ids, indices = predict(model, dataset, device,
                                          batch_size=1,
                                          num_workers=1,
@@ -111,6 +146,6 @@ def annotate_with_deepnog(identifier: str, protein_list: List[SeqRecord],
     if hasattr(model, 'threshold'):
         threshold = model.threshold
     df = create_df(class_labels, preds, confs, ids, indices,
-                   threshold=threshold, device=device, verbose=0)
+                   threshold=threshold, verbose=0)
     cogs = [x for x in df.prediction.unique() if x]
     return GenotypeRecord(identifier=identifier, features=cogs)

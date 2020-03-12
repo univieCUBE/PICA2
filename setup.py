@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
-"""The setup script."""
 
 import codecs
 from os import path

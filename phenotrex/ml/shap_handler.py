@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List
+from typing import Tuple
 
 import pandas as pd
 import numpy as np
@@ -97,20 +97,20 @@ class ShapHandler:
         try:
             X_agg = self._used_features.astype(float)
             shap_agg = self._used_shaps.astype(float)
-        except (ValueError, AttributeError) as e:
+        except (ValueError, AttributeError):
             raise RuntimeError('No explanations saved.')
         sample_names = self._sample_names
         return X_agg, shap_agg, sample_names
 
-    def _get_sorted_by_shap_data(self, sort_by_idx=None) -> Tuple[
-        np.ndarray, np.ndarray, np.ndarray]:
+    def _get_sorted_by_shap_data(self, sort_by_idx=None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Sort features by absolute magnitude of shap values,
         and return sorted features, shap values and feature names.
 
         :param sort_by_idx: if an index into the sample names is passed,
                             sorting will be based only on this sample's SHAP values.
-        :return: Used features, used shaps, and the feature names all sorted by absolute magnitude of shap value.
+        :return: Used features, used shaps, and the feature names
+                 all sorted by absolute magnitude of shap value.
         """
         X_agg, shap_agg, _ = self._get_feature_data()
 
@@ -125,12 +125,11 @@ class ShapHandler:
             absshap = np.apply_along_axis(np.abs, feature_axis, shap_agg)
             if sort_by_idx is None:  # sort features by absolute change in shap over all classes and samples
                 sort_criterion = np.apply_over_axes(np.sum, absshap, nonfeature_axes)
-                feature_sort_inds = np.squeeze(np.argsort(sort_criterion))[::-1]
             else:  # sort features by absolute change in shap over all classes for given sample idx
                 sort_criterion = np.sum(absshap[sort_by_idx, ...], axis=0)
             feature_sort_inds = np.squeeze(np.argsort(sort_criterion))[::-1]
-        return X_agg[:, feature_sort_inds], shap_agg[..., feature_sort_inds], \
-               self._used_feature_names[feature_sort_inds]
+        return (X_agg[:, feature_sort_inds], shap_agg[..., feature_sort_inds],
+                self._used_feature_names[feature_sort_inds])
 
     def plot_shap_force(self, sample_name: str, **kwargs):
         """
@@ -186,7 +185,7 @@ class ShapHandler:
                           max_display=n_max_features,
                           class_names=class_names,
                           title=f'SHAP Summary',
-                          show=True,
+                          show=False,
                           **kwargs)
 
     def get_shap_force(self, sample_name: str, n_max_features: int = 20) -> pd.DataFrame:
@@ -196,7 +195,6 @@ class ShapHandler:
 
         :param sample_name:
         :param n_max_features:
-        :param nsamples:
         :return: a dataframe of the n_max_features most influential features,
                  their value in the sample, and the associated
         SHAP value(s).
@@ -215,6 +213,7 @@ class ShapHandler:
             shap_vals = [shap_agg_s[i, :n_max_features].round(5), ]
         sample_names = [sample_name] * len(fns)
         df_arrs = [sample_names, fns, feature_vals, *shap_vals]
+        df_arrs = [np.array(x) for x in df_arrs]
         df_labels = ['sample', 'feature', 'feature_value',
                      *[f'SHAP value ({x})' for x in self._class_names]][:len(df_arrs)]
         df = pd.DataFrame(df_arrs, index=df_labels).T
@@ -223,7 +222,8 @@ class ShapHandler:
 
     def get_shap_summary(self, n_max_features: int = 50):
         """
-        Get summary of features for all predictions, sorted by average impact of feature on shap value.
+        Get summary of features for all predictions,
+        sorted by average impact of feature on shap value.
 
         :param n_max_features:
         :return: a DataFrame of most important SHAP values for samples in the given dataset.

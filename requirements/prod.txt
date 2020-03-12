@@ -5,3 +5,4 @@ xgboost>=1.0.1
 shap>=0.34
 click>=7.0
 biopython>=1.74
+tqdm>=4.26.0

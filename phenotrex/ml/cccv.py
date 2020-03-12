@@ -124,7 +124,8 @@ class CompleContaCV:
         X_train, y_train, tn = get_x_y_tn(training_records)
         classifier.fit(X=X_train, y=y_train, **kwargs)
 
-        # initialize the resampler with the test_records only, so the samples are unknown to the classifier
+        # initialize the resampler with the test_records only,
+        # so the samples are unknown to the classifier
         resampler = TrainingRecordResampler(random_state=self.random_state, verb=False)
         resampler.fit(records=test_records)
         cv_scores = {}
@@ -147,7 +148,8 @@ class CompleContaCV:
         """
         # TODO: run compress_vocabulary before?
 
-        self.logger.info("Begin completeness/contamination matrix crossvalidation on training data.")
+        self.logger.info(
+            "Begin completeness/contamination matrix crossvalidation on training data.")
         t1 = time()
         if self.n_jobs is None:
             cv_scores = map(self._completeness_cv, self._replicates(records, self.cv,
@@ -168,7 +170,8 @@ class CompleContaCV:
         for comple in cv_scores_list[0].keys():
             mba[comple] = {}
             for conta in cv_scores_list[0][comple].keys():
-                single_result = [cv_scores_list[r][comple][conta] for r in range(self.n_replicates * self.cv)]
+                single_result = [cv_scores_list[r][comple][conta] for r in
+                                 range(self.n_replicates * self.cv)]
                 mean_over_fold_and_replicates = np.mean(single_result)
                 std_over_fold_and_replicates = np.std(single_result)
                 mba[comple][conta] = {"score_mean": mean_over_fold_and_replicates,

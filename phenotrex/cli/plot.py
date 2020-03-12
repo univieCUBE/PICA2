@@ -31,7 +31,34 @@ def cccv(inputs, out, title):
     compleconta_plot(cccv_results=cccv_results, conditions=conditions, title=title, save_path=out)
 
 
-@plot.command('shap-force')
+@plot.command('shap-summary', short_help='Plot summary of SHAP feature contributions.')
+@click.argument('fasta_files', type=click.Path(exists=True), nargs=-1)
+@click.option('--genotype', type=click.Path(exists=True),
+              required=False, help='Input genotype file.')
+@click.option('--classifier', required=True, type=click.Path(exists=True),
+              help='Path of pickled classifier file.')
+@click.option('--out', required=True, type=click.Path(dir_okay=False),
+              help='The file to save the generated summary plot at.')
+@click.option('--n_max_features', type=int, default=20,
+              help='The number of top most important features (by absolute SHAP value) to plot.')
+@click.option('--n_samples', type=int, default=None,
+              help='The nsamples parameter of SHAP. '
+                   'Only used by models which utilize a `shap.KernelExplainer` (e.g. TrexSVM).')
+@click.option('--title', type=str, default='', help='Plot title.')
+@click.option('--verb', is_flag=True)
+def shap_summary(out, n_max_features, title, **kwargs):
+    import matplotlib as mpl
+    mpl.use('Agg')
+    import matplotlib.pyplot as plt
+    from .generic_func import generic_compute_shaps
+
+    sh, gr = generic_compute_shaps(**kwargs)
+    sh.plot_shap_summary(title=title, n_max_features=n_max_features)
+    plt.tight_layout()
+    plt.savefig(out)
+
+
+@plot.command('shap-force', short_help='Plot SHAP feature contributions per sample.')
 @click.argument('fasta_files', type=click.Path(exists=True), nargs=-1)
 @click.option('--genotype', type=click.Path(exists=True),
               required=False, help='Input genotype file.')
@@ -43,7 +70,7 @@ def cccv(inputs, out, title):
               help='The nsamples parameter of SHAP. '
                    'Only used by models which utilize a `shap.KernelExplainer` (e.g. TrexSVM).')
 @click.option('--verb', is_flag=True)
-def shap_force(fasta_files, genotype, classifier, out_prefix, n_samples, verb):
+def shap_force(out_prefix, **kwargs):
     """
     Generate SHAP force plots for each sample (passed either as FASTA files or as genotype file).
     All plots will be saved at the path `{out_prefix}_{sample_identifier}_force_plot.png`.
@@ -53,29 +80,9 @@ def shap_force(fasta_files, genotype, classifier, out_prefix, n_samples, verb):
     mpl.use('Agg')
     import matplotlib.pyplot as plt
     from tqdm.auto import tqdm
-    try:
-        from phenotrex.transforms import fastas_to_grs
-    except ModuleNotFoundError:
-        from phenotrex.util.helpers import fail_missing_dependency as fastas_to_grs
-    from phenotrex.io.flat import load_genotype_file
-    from phenotrex.io.serialization import load_classifier
-    from phenotrex.ml.shap_handler import ShapHandler
-    if not len(fasta_files) and genotype is None:
-        raise RuntimeError(
-            'Must either supply FASTA file(s) or single genotype file for prediction.')
-    if len(fasta_files):
-        grs_from_fasta = fastas_to_grs(fasta_files, n_threads=None, verb=verb)
-    else:
-        grs_from_fasta = []
+    from .generic_func import generic_compute_shaps
 
-    grs_from_file = load_genotype_file(genotype) if genotype is not None else []
-    gr = grs_from_fasta + grs_from_file
-
-    model = load_classifier(filename=classifier, verb=verb)
-    sh = ShapHandler.from_clf(model)
-    fs, sv, bv = model.get_shap(gr, nsamples=n_samples)
-    sh.add_feature_data(sample_names=[x.identifier for x in gr],
-                        features=fs, shaps=sv, base_value=bv)
+    sh, gr = generic_compute_shaps(**kwargs)
     for record in tqdm(gr, unit='samples', desc='Generating force plots'):
         sh.plot_shap_force(record.identifier)
         out_path = Path(f'{out_prefix}_{record.identifier}_force_plot.png')

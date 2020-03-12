@@ -8,6 +8,9 @@ import click
               required=False, help='Input genotype file.')
 @click.option('--classifier', required=True, type=click.Path(exists=True),
               help='Path of pickled classifier file.')
+@click.option('--min_proba', type=click.FloatRange(0.5, 1.0), default=0.5,
+              help='Class probability threshold for displaying predictions. '
+                   'Predictions below the threshold will be given as "N/A".')
 @click.option('--out_explain_per_sample', type=click.Path(dir_okay=False),
               help='Write SHAP explanations for each predicted sample to file (optional).')
 @click.option('--out_explain_summary', type=click.Path(dir_okay=False),

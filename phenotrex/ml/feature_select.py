@@ -17,17 +17,14 @@ DEFAULT_SCORING_FUNCTION = 'balanced_accuracy'
 
 def compress_vocabulary(records: List[TrainingRecord], pipeline: Pipeline):
     """
-    Method to group features, that store redundant information, to avoid overfitting and speed up process (in some
-    cases). Might be replaced or complemented by a feature selection method in future versions.
-
-    Compressing vocabulary is optional, for the test dataset it took 30 seconds, while the time saved later on is not
-    significant.
+    Method to group features, that store redundant information,
+    to avoid overfitting and speed up process (in some cases).
+    Might be replaced or complemented by a feature selection method in future versions.
 
     :param records: a list of TrainingRecord objects.
     :param pipeline: the targeted pipeline where the vocabulary should be modified
     :return: nothing, sets the vocabulary for CountVectorizer step
     """
-
     X, y, tn = get_x_y_tn(records)  # we actually only need X
     vec = pipeline.named_steps["vec"]
     if not vec.vocabulary:
@@ -58,8 +55,10 @@ def compress_vocabulary(records: List[TrainingRecord], pipeline: Pipeline):
     pipeline.named_steps["vec"].fixed_vocabulary_ = True
 
 
-def recursive_feature_elimination(records: List[TrainingRecord], pipeline: Pipeline, step: float = DEFAULT_STEP_SIZE,
-                                  n_features: int = None, random_state: np.random.RandomState = None):
+def recursive_feature_elimination(records: List[TrainingRecord], pipeline: Pipeline,
+                                  step: float = DEFAULT_STEP_SIZE,
+                                  n_features: int = None,
+                                  random_state: np.random.RandomState = None):
     """
     Function to apply RFE to limit the vocabulary used by the CustomVectorizer, optional step.
 
@@ -101,40 +100,19 @@ def recursive_feature_elimination(records: List[TrainingRecord], pipeline: Pipel
     support = selector.get_support()
     support = support.nonzero()[0]
     new_id = {support[x]: x for x in range(len(support))}
-    vocabulary = {feature: new_id[i] for feature, i in previous_vocabulary.items() if not new_id.get(i) is None}
+    vocabulary = {feature: new_id[i] for feature, i in previous_vocabulary.items() if
+                  not new_id.get(i) is None}
     size_after = selector.n_features_
 
     t2 = time()
 
-    logger.info(f"{size_after} features were selected of {original_size} using Recursive Feature Eliminiation"
-                f" in {np.round(t2 - t1, 2)} seconds.")
+    logger.info(
+        f"{size_after} features were selected of {original_size} using Recursive Feature Eliminiation"
+        f" in {np.round(t2 - t1, 2)} seconds.")
 
     # set vocabulary to vectorizer
     pipeline.named_steps["vec"].vocabulary = vocabulary
     pipeline.named_steps["vec"].vocabulary_ = vocabulary
     pipeline.named_steps["vec"].fixed_vocabulary_ = True
-
-    return size_after
-
-
-def multiple_step_rfecv(records: List[TrainingRecord], pipeline: Pipeline, n_features: int, step=(0.01, 0.01, 0.01, ),
-                        random_state: np.random.RandomState = None):
-    """
-    Function to apply multiple steps-sizes of RFECV in series, currently not used. Strategy might be problematic,
-    no clear benefit. #TODO rethink or remove
-
-    :param records: Data used
-    :param pipeline: The base estimator used
-    :param n_features: Goal number of features
-    :param step: List of steps that should be applied
-    :param random_state: random state for deterministic results
-    :return:
-    """
-    # step = [0.0025]
-    for s in step:
-        size_after = recursive_feature_elimination(records, pipeline=pipeline, step=s, n_features=n_features,
-                                                   random_state=random_state)
-        if size_after == n_features:
-            break
 
     return size_after

@@ -1,5 +1,3 @@
-from tempfile import TemporaryDirectory
-from pathlib import Path
 import sys
 import json
 
@@ -7,21 +5,24 @@ import pytest
 import numpy as np
 import matplotlib as mpl
 mpl.use('Agg')
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from tests.targets import (first_genotype_accession, first_phenotype_accession, cv_scores_trex,
-                           num_of_features_compressed, num_of_features_uncompressed)
-from phenotrex.io.flat import load_training_files
-from phenotrex.io.serialization import load_classifier
-from phenotrex.ml.shap_handler import ShapHandler
+from tests.targets import (first_genotype_accession, first_phenotype_accession, first_groups_accession,
+                           cv_scores_trex, num_of_features_compressed, num_of_features_uncompressed)
+from phenotrex.io.flat import (load_training_files,
+                               write_weights_file, write_params_file, write_misclassifications_file)
+from phenotrex.io.serialization import save_classifier
 from phenotrex.ml import TrexSVM, TrexXGB
 from phenotrex.util.helpers import get_x_y_tn
 from phenotrex.ml.feature_select import recursive_feature_elimination, compress_vocabulary
 from phenotrex.ml.prediction import predict
 
-
 from . import DATA_PATH, FROM_FASTA
 
+
 RANDOM_STATE = 2
+
 
 trait_names = [
     "Sulfate_reducer",
@@ -71,12 +72,15 @@ class TestTrexClassifier:
         """
         full_path_genotype = DATA_PATH / f"{trait_name}.genotype"
         full_path_phenotype = DATA_PATH / f"{trait_name}.phenotype"
+        full_path_groups = DATA_PATH / f"{trait_name}.taxids"
         training_records, genotype, phenotype, group = load_training_files(
             genotype_file=full_path_genotype,
             phenotype_file=full_path_phenotype,
+            groups_file=full_path_groups,
             verb=True)
         assert genotype[0].identifier == first_genotype_accession[trait_name]
         assert phenotype[0].identifier == first_phenotype_accession[trait_name]
+        assert group[0].identifier == first_groups_accession[trait_name]
         return training_records, genotype, phenotype, group
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
@@ -91,28 +95,46 @@ class TestTrexClassifier:
         """
         training_records, genotype, phenotype, group = self.test_load_training_files(trait_name)
         clf = classifier(verb=True, random_state=RANDOM_STATE)
-        _ = clf.train(records=training_records, train_explainer=use_shaps)
+        clf.train(records=training_records, train_explainer=use_shaps)
+        with TemporaryDirectory() as tmpdir:
+            clf_path = Path(tmpdir)/'classifier.pkl'
+            weights_path = Path(tmpdir)/'weights.rank'
+            save_classifier(clf,  clf_path)
+            weights = clf.get_feature_weights()
+            write_weights_file(weights_file=weights_path, weights=weights)
+            assert clf_path.is_file()
+            assert weights_path.is_file()
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("cv", cv_folds, ids=[str(x) for x in cv_folds])
-    @pytest.mark.parametrize("scoring", scoring_methods, ids=scoring_methods)
     @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
-    def test_crossvalidate(self, trait_name, cv, scoring, classifier):
+    @pytest.mark.parametrize("use_groups", [True, False], ids=['logo', 'nologo'])
+    def test_crossvalidate(self, trait_name, cv, classifier, use_groups):
         """
-        Test default crossvalidation of PICASVM class. Using several different traits, cv folds, and scoring methods.
+        Test default crossvalidation of TrexClassifier class.
+        Using several different traits, cv folds, and scoring methods.
         Compares with dictionary cv_scores.
+
         :param trait_name:
         :param cv:
         :param scoring:
         :param classifier:
+        :param use_groups:
         :return:
         """
         training_records, genotype, phenotype, group = self.test_load_training_files(trait_name)
         clf = classifier(verb=True, random_state=RANDOM_STATE)
-        score_pred = clf.crossvalidate(records=training_records, cv=cv, scoring=scoring)[:2]
-        if classifier.identifier in cv_scores_trex:
-            score_target = cv_scores_trex[classifier.identifier][trait_name][cv][scoring]
+        score_pred = clf.crossvalidate(records=training_records,
+                                       cv=cv, scoring=scoring_methods[0],
+                                       groups=use_groups)[:2]
+        if classifier.identifier in cv_scores_trex and not use_groups:
+            score_target = cv_scores_trex[classifier.identifier][trait_name][cv][scoring_methods[0]]
             np.testing.assert_almost_equal(actual=score_pred, desired=score_target, decimal=1)
+        with TemporaryDirectory() as tmpdir:
+            misclass_path = Path(tmpdir)/'misclassifications.tsv'
+            write_misclassifications_file(misclass_path, training_records,
+                                          score_pred, use_groups=use_groups)
+            assert misclass_path.is_file()
 
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
@@ -126,10 +148,13 @@ class TestTrexClassifier:
         """
         training_records, genotype, phenotype, group = self.test_load_training_files(trait_name)
         clf = classifier(verb=True, random_state=RANDOM_STATE)
-        clf_opt = clf.parameter_search(records=training_records, n_iter=5, return_optimized=True)
-        assert type(clf_opt) == type(clf)
+        clf_opt = clf.parameter_search(records=training_records, n_iter=5, return_optimized=False)
+        assert isinstance(clf_opt, dict)
+        with TemporaryDirectory() as tmpdir:
+            param_path = Path(tmpdir)/'params.json'
+            write_params_file(param_path, clf_opt)
+            assert param_path.is_file()
 
-    @pytest.mark.skipif(sys.platform != "linux", reason="Stallman was right")
     @pytest.mark.parametrize("trait_name", trait_names, ids=trait_names)
     @pytest.mark.parametrize("classifier", classifiers, ids=classifier_ids)
     def test_compleconta_cv(self, trait_name, classifier):
@@ -248,7 +273,6 @@ class TestTrexClassifier:
         for x in non_zero:
             if len(x) == 0:
                 one_is_zero = True
-
         assert not one_is_zero
 
     @pytest.mark.parametrize('trait_name', trait_names, ids=trait_names)
@@ -257,7 +281,6 @@ class TestTrexClassifier:
         model_path = DATA_PATH/f'{trait_name}_{classifier_type.lower()}.pkl'
         genotype_file = DATA_PATH/f'{trait_name}.genotype'
         print(predict(classifier=model_path, genotype=genotype_file))
-
 
     @pytest.mark.skipif(not FROM_FASTA, reason='Missing optional dependencies')
     @pytest.mark.parametrize('trait_name', trait_names, ids=trait_names)

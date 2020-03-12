@@ -3,6 +3,7 @@
 #
 from .clf.svm import TrexSVM
 from .clf.xgbm import TrexXGB
+from .shap_handler import ShapHandler
 
 
-__all__ = ['TrexXGB', 'TrexSVM']
+__all__ = ['TrexXGB', 'TrexSVM', 'ShapHandler']

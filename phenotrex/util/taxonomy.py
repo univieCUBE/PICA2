@@ -10,15 +10,14 @@ DEFAULT_AUTO_SELECTED_RANK = "family"
 
 def get_taxonomic_group_mapping(group_ids: List[str], selected_rank: str) -> Tuple[Dict, Dict]:
     """
-    Function to create a mapping from NCBI-taxon ids to groups which are used to split the provided training records
-    into training and validation sets
+    Function to create a mapping from NCBI-taxon ids to groups which are used to split the provided
+    training records into training and validation sets
 
     :param group_ids: List of identifiers that should be NCBI taxon ids
-    :param selected_rank: selected standard rank determining on which level the set is split in training- and
-     validation-set
+    :param selected_rank: selected standard rank determining on which level the set is split in
+                          training and validation-set
     :return: Mapping of input taxon_ids as string and groups as integers
     """
-
     ncbi = NCBITaxa()
     standard_ranks = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
     if not selected_rank.lower() in standard_ranks:
@@ -53,7 +52,5 @@ def auto_select_rank(group_ids: List[str]) -> str:
     :param group_ids:
     :return: selected rank
     """
-
     # TODO: implement some auto detection method, if needed
-
     return DEFAULT_AUTO_SELECTED_RANK

@@ -51,7 +51,8 @@ install:
   # pip will build them from source using the MSVC compiler matching the
   # target Python version and architecture
   - "python -m pip install wheel pytest"
-  - "python -m pip install -r requirements/prod.txt"
+  - "python -m pip install -r requirements/win.txt -f https://download.pytorch.org/whl/torch_stable.html"
+  - "python -m pip install -r requirements/dev.txt"
 
 build_script:
   # Build the compiled extension

@@ -1,4 +1,5 @@
 -r prod.txt
+-r extras.txt
 -r test.txt
 pip>=19.2.3
 wheel>=0.33.6

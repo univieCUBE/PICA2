@@ -9,6 +9,10 @@ first_phenotype_accession = {
     "Sulfate_reducer": "GCA_000007085.1",
 }
 
+first_groups_accession = {
+    "Sulfate_reducer": "GCA_000007085.1",
+}
+
 cv_scores_trex = {
     'SVM': {'Sulfate_reducer': {3 : {'accuracy'         : (0.9477939477939478, 0.04189200493982592),
                                      'balanced_accuracy': (0.94017094017094, 0.04262807124628204),
