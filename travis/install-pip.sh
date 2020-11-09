@@ -15,6 +15,8 @@ if [[ "$TRAVIS_OS_NAME" == 'linux' ]]; then
   pip install -r requirements/dev.txt
   python -c "import torch; print(f'PyTorch version = {torch.__version__}')"
 elif [[ "$TRAVIS_OS_NAME" == 'osx' ]]; then
+  echo "install XGboost via conda-forge due to univieCUBE/phenotrex #23"
+  conda install -c conda-forge xgboost
   echo "pip installing required python packages"
   pip install -r requirements/dev.txt
 fi

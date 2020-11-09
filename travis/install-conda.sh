@@ -21,7 +21,7 @@ else # if it does not exist, we need to install miniconda
     conda config --set always_yes yes --set changeps1 no
     conda update -q conda
     conda info -a # for debugging
-    echo "$TRAVIS_PYTHON_VERSION"
+    echo "TRAVIS_PYTHON_VERSION=$TRAVIS_PYTHON_VERSION"
 fi
 
 # Is the specified Python version available? If not, install it.
