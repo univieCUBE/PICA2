@@ -9,10 +9,10 @@ from subprocess import check_call, DEVNULL
 from concurrent.futures import ProcessPoolExecutor
 
 import torch
-from deepnog.inference import load_nn, predict
-from deepnog.io import create_df, get_weights_path
-from deepnog.utils import set_device
-from deepnog.dataset import ProteinDataset, ProteinIterator
+from deepnog.learning.inference import predict
+from deepnog.utils import create_df, get_weights_path
+from deepnog.utils import load_nn, set_device
+from deepnog.data.dataset import ProteinDataset, ProteinIterator
 from Bio.SeqIO import SeqRecord, parse, write
 from tqdm.auto import tqdm
 
