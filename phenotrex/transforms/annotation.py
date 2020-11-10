@@ -46,7 +46,7 @@ class PreloadedProteinIterator(ProteinIterator):
 class PreloadedProteinDataset(ProteinDataset):
     """Hack ProteinDataset to load from list directly."""
     def __init__(self, protein_list: List[SeqRecord]):
-        super().__init__(sequences=None)
+        super().__init__(sequences=protein_list)
         self.protein_list = protein_list
 
     def __iter__(self):
